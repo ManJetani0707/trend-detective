@@ -1,13 +1,12 @@
 """Trend Detective: a Streamlit app for NASA Space Apps 2026 'Be An Earth System Trend Detective'.
 
 Run:  streamlit run app.py
-
 Original code written for NASA Space Apps 2026.
 """
-
 from __future__ import annotations
 
 import os
+
 import streamlit as st
 
 from src.config import ALPHA, DEFAULT_YEARS, DEMOS, REGION_PRESETS, TOPICS, VARIABLES
@@ -15,6 +14,17 @@ from src.data import DataUnavailable, demo_available, get_cube, load_demo
 from src.plots import seasonal_figure, timeseries_figure, trend_map_figure, verdict_card_html
 from src.processing import RecordTooShort, build_series, pixel_anomaly_cube
 from src.stats import analyze_trend, pixel_trends, verdict
+
+import inspect
+
+
+def show_chart(fig) -> None:
+    """Full-width Plotly chart that works on old and new Streamlit (use_container_width was replaced by width="stretch")."""
+    if "width" in inspect.signature(st.plotly_chart).parameters:
+        st.plotly_chart(fig, width="stretch")
+    else:
+        st.plotly_chart(fig, use_container_width=True)
+
 
 st.set_page_config(page_title="Trend Detective", page_icon="🔎", layout="wide")
 
@@ -50,18 +60,10 @@ def show_results(cube, var, bbox, region_name: str, want_map: bool):
 
     source = cube.attrs.get("source", "unknown")
     v = verdict(res, var.units, var.label)
-    
     for note in out["notes"]:
         st.info(note)
-        
     st.markdown(verdict_card_html(v, res, var.units, region_name, source), unsafe_allow_html=True)
-    
-    # Timeseries Plot
-    st.plotly_chart(
-        timeseries_figure(out["anomalies"], res, var.units, f"{var.label}: monthly anomalies"), 
-        width="stretch"
-    )
-    
+    show_chart(timeseries_figure(out["anomalies"], res, var.units, f"{var.label}: monthly anomalies"))
     with st.expander("What am I looking at? (plain language)"):
         st.markdown(
             f"- **Anomaly** = this month's value minus the usual value for that calendar month, so seasons do not hide the trend.\n"
@@ -70,11 +72,8 @@ def show_results(cube, var, bbox, region_name: str, want_map: bool):
             f"Below {ALPHA} we call it significant.\n"
             f"- **OLS cross-check** is the ordinary straight-line fit; if it agrees, we trust the answer more.\n"
             f"- Only **straight-line** trends are tested here. Curved or sudden changes are future work.\n"
-            f"- Averaged over **{out['n_cells']}** grid cell(s), weighted by cos(latitude)."
-        )
-    
-    # Seasonal Climatology Plot (unindented from expander, correctly aligned)
-    st.plotly_chart(seasonal_figure(out["climatology"], var.units), width="stretch")
+            f"- Averaged over **{out['n_cells']}** grid cell(s), weighted by cos(latitude).")
+        show_chart(seasonal_figure(out["climatology"], var.units))
 
     if want_map:
         if out["n_cells"] < 2:
@@ -84,9 +83,7 @@ def show_results(cube, var, bbox, region_name: str, want_map: bool):
             slope, pval, stride = pixel_trends(pixel_anomaly_cube(out["clipped"]))
         if stride > 1:
             st.caption(f"Box is large, so every {stride}th grid cell is shown to keep the app fast.")
-        
-        # Spatial Map Plot
-        st.plotly_chart(trend_map_figure(slope, pval, var.units), width="stretch")
+        show_chart(trend_map_figure(slope, pval, var.units))
 
 
 st.title("🔎 Trend Detective")
@@ -109,7 +106,6 @@ with tab_guided:
     choice = st.selectbox("Variable", list(labels), key="variable")
     var = labels[choice]
     st.markdown(f"**In one line:** {var.definition}")
-    
     if var.status != "ready":
         st.warning("This variable is a planned stretch goal and is not implemented yet. Pick another one.")
 
@@ -133,13 +129,11 @@ with tab_guided:
     lo = max(var.first_year, 1980)
     y0, y1 = st.slider("Years", lo, 2025, (max(lo, 2025 - MAX_LIVE_YEARS + 1), 2025), key="years")
     too_long = (y1 - y0 + 1) > MAX_LIVE_YEARS
-    
     if DEMO_ONLY:
         st.info("Live NASA downloads are switched off on this public server to keep it fast and stable. "
                 "Use the Instant demos tab, or run the app on your own computer for live searches.")
     if too_long:
         st.warning(f"Live downloads are limited to {MAX_LIVE_YEARS} years so the app stays fast. Shorten the period, or open the Instant demos tab for longer records.")
-    
     want_map = st.checkbox("Also draw the per-pixel trend map (slower)", value=False)
 
     if st.button("🔎 Investigate", type="primary", disabled=(var.status != "ready") or too_long or (DEMO_ONLY and not DEV_SYNTHETIC)):
@@ -154,6 +148,7 @@ with tab_guided:
 with tab_demo:
     st.subheader("Instant examples")
     st.caption("These load from files saved inside the app, so no login or waiting is needed.")
+    demo_map = st.checkbox("Also draw the per-pixel trend map (takes a few seconds)", value=False, key="demo_map")
     for demo_id, d in DEMOS.items():
         ready = demo_available(demo_id) or DEV_SYNTHETIC
         label = f"{d['title']}" + ("" if ready else "  (cache not built yet)")
@@ -163,7 +158,7 @@ with tab_demo:
                 cube = _synthetic_cube(d["bbox"], d["years"]) if DEV_SYNTHETIC else load_demo(demo_id)
                 if not d.get("confirmed"):
                     st.caption("Region and years for this demo are suggested defaults still waiting for team confirmation.")
-                show_results(cube, dvar, d["bbox"], d["region"], want_map=False)
+                show_results(cube, dvar, d["bbox"], d["region"], want_map=demo_map)
             except DataUnavailable as exc:
                 st.error(str(exc))
 
