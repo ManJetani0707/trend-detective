@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import os
 
+import pandas as pd
+
 import streamlit as st
 
 from src.config import ALPHA, DEFAULT_YEARS, DEMOS, REGION_PRESETS, TOPICS, VARIABLES
@@ -46,6 +48,28 @@ def _synthetic_cube(bbox, years):
     return synthetic_cube(bbox=bbox, years=years)
 
 
+@st.cache_data(show_spinner=False)
+def _load_cube(demo_id: str):
+    return load_demo(demo_id)
+
+
+def _find_demo(var_key: str, bbox) -> str | None:
+    """A preloaded demo file that matches this variable and region, if one exists on this server."""
+    for demo_id, d in DEMOS.items():
+        if d["var"] == var_key and tuple(d["bbox"]) == tuple(bbox) and demo_available(demo_id):
+            return demo_id
+    return None
+
+
+def _preloaded_years(demo_id: str) -> tuple[int, int]:
+    t = pd.DatetimeIndex(_load_cube(demo_id)["time"].values)
+    return int(t.year.min()), int(t.year.max())
+
+
+def _preloaded_list() -> str:
+    return "; ".join(f"{VARIABLES[d['var']].label} in {d['region']}" for k, d in DEMOS.items() if demo_available(k))
+
+
 def show_results(cube, var, bbox, region_name: str, want_map: bool):
     """Process -> statistics -> visuals. Shared by guided mode and demos."""
     try:
@@ -82,7 +106,7 @@ def show_results(cube, var, bbox, region_name: str, want_map: bool):
         with st.spinner("Testing every grid cell (this can take a few seconds)..."):
             slope, pval, stride = pixel_trends(pixel_anomaly_cube(out["clipped"]))
         if stride > 1:
-            st.caption(f"Box is large, so every {stride}th grid cell is shown to keep the app fast.")
+            st.caption(f"Large box: the map samples every {stride} grid cells in each direction to keep the app fast.")
         show_chart(trend_map_figure(slope, pval, var.units))
 
 
@@ -126,20 +150,33 @@ with tab_guided:
         st.caption(f"Box (west, south, east, north): {bbox}")
 
     st.subheader("Step 3: Which years?")
-    lo = max(var.first_year, 1980)
-    y0, y1 = st.slider("Years", lo, 2025, (max(lo, 2025 - MAX_LIVE_YEARS + 1), 2025), key="years")
-    too_long = (y1 - y0 + 1) > MAX_LIVE_YEARS
-    if DEMO_ONLY:
-        st.info("Live NASA downloads are switched off on this public server to keep it fast and stable. "
-                "Use the Instant demos tab, or run the app on your own computer for live searches.")
-    if too_long:
-        st.warning(f"Live downloads are limited to {MAX_LIVE_YEARS} years so the app stays fast. Shorten the period, or open the Instant demos tab for longer records.")
+    demo_id = None if DEV_SYNTHETIC else (_find_demo(var.key, bbox) if DEMO_ONLY else None)
+    preloaded = demo_id is not None
+    if preloaded:
+        lo, hi = _preloaded_years(demo_id)
+        y0, y1 = st.slider("Years", lo, hi, (lo, hi), key=f"years_{demo_id}")
+        too_long = False
+        st.success("Preloaded NASA data for this variable and region: instant results for any years you choose.")
+    else:
+        lo = max(var.first_year, 1980)
+        y0, y1 = st.slider("Years", lo, 2025, (max(lo, 2025 - MAX_LIVE_YEARS + 1), 2025), key=f"years_live_{var.key}")
+        too_long = (y1 - y0 + 1) > MAX_LIVE_YEARS
+        if DEMO_ONLY:
+            st.info("This variable and region is not preloaded, and live NASA downloads are switched off on this public "
+                    "server to keep it fast and stable. Preloaded choices: " + (_preloaded_list() or "none yet") +
+                    ". Or run the app on your own computer for live searches.")
+        elif too_long:
+            st.warning(f"Live downloads are limited to {MAX_LIVE_YEARS} years so the app stays fast. Shorten the period.")
     want_map = st.checkbox("Also draw the per-pixel trend map (slower)", value=False)
 
-    if st.button("🔎 Investigate", type="primary", disabled=(var.status != "ready") or too_long or (DEMO_ONLY and not DEV_SYNTHETIC)):
+    can_run = var.status == "ready" and not too_long and (preloaded or not DEMO_ONLY or DEV_SYNTHETIC)
+    if st.button("🔎 Investigate", type="primary", disabled=not can_run):
         try:
-            with st.spinner("Getting NASA data (first time can take a few minutes; later runs use the cache)..."):
-                cube = _synthetic_cube(bbox, (y0, y1)) if DEV_SYNTHETIC else get_cube(var, bbox, y0, y1)
+            if preloaded:
+                cube = _load_cube(demo_id).sel(time=slice(f"{y0}-01-01", f"{y1}-12-31"))
+            else:
+                with st.spinner("Getting NASA data (first time can take a few minutes; later runs use the cache)..."):
+                    cube = _synthetic_cube(bbox, (y0, y1)) if DEV_SYNTHETIC else get_cube(var, bbox, y0, y1)
             show_results(cube, var, bbox, region_name, want_map)
         except DataUnavailable as exc:
             st.error(f"Could not get data. {exc}")
