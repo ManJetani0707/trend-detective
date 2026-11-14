@@ -218,3 +218,11 @@ then Theil-Sen slope + Mann-Kendall test (pymannkendall), cross-checked with OLS
 - GLDAS and MERRA-2 are model/reanalysis products, not direct measurements.
 - NASA POWER fallback is a single point at the centre of your box, so it can differ from the area average.
 """)
+
+# ------------------------------------------------------------------ footer
+st.divider()
+st.caption(
+    "⚠️ Limitation: this public app runs on free hosting with limited memory, so only some preloaded NASA data is "
+    "available here (" + (_preloaded_list() or "no preloaded data yet") + "). "
+    "Live downloads for any other variable or region work when you run the app on your own computer."
+)
