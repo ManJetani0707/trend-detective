@@ -113,8 +113,10 @@ def verdict(res: TrendResult, units: str, label: str) -> dict:
         caution.append("Mann-Kendall and the OLS confidence interval disagree on significance; the signal is borderline.")
 
     if res.significant:
-        return dict(kind="significant", color="#c0392b" if rising else "#2471a3",
-                    headline=f"Significant {direction} trend",
+        borderline = res.hr_p >= res.alpha   # Mann-Kendall says yes, the autocorrelation-aware test says not clearly
+        return dict(kind="significant_borderline" if borderline else "significant",
+                    color="#b9770e" if borderline else ("#c0392b" if rising else "#2471a3"),
+                    headline=f"Significant {direction} trend (borderline)" if borderline else f"Significant {direction} trend",
                     detail=f"{label} changed by about {res.sen_per_decade:+.3g} {units} per decade "
                            f"(about {total:+.3g} {units} over the whole period).",
                     caution=caution)

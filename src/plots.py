@@ -80,5 +80,9 @@ def trend_map_figure(slope: xr.DataArray, pval: xr.DataArray, units: str, alpha:
     fig.update_layout(title="Where is it changing? Trend per grid cell (x = not significant)",
                       xaxis_title="Longitude", yaxis_title="Latitude", template="plotly_white",
                       margin=dict(l=40, r=20, t=60, b=40), legend=dict(orientation="h", y=-0.2))
-    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    padx = max((lon.max() - lon.min()) * 0.03, 0.1)
+    pady = max((lat.max() - lat.min()) * 0.03, 0.1)
+    fig.update_xaxes(range=[lon.min() - padx, lon.max() + padx], constrain="domain")
+    fig.update_yaxes(range=[lat.min() - pady, lat.max() + pady], scaleanchor="x", scaleratio=1, constrain="domain")
+    fig.update_layout(height=560)
     return fig
