@@ -42,7 +42,7 @@ def show_results(cube, var, bbox, region_name: str, want_map: bool):
     for note in out["notes"]:
         st.info(note)
     st.markdown(verdict_card_html(v, res, var.units, region_name, source), unsafe_allow_html=True)
-  st.plotly_chart(timeseries_figure(out["anomalies"], res, var.units, f"{var.label}: monthly anomalies"), width="stretch")
+    st.plotly_chart(timeseries_figure(out["anomalies"], res, var.units, f"{var.label}: monthly anomalies"), width="stretch")
 
 
     with st.expander("What am I looking at? (plain language)"):
