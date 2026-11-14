@@ -42,8 +42,9 @@ def show_results(cube, var, bbox, region_name: str, want_map: bool):
     for note in out["notes"]:
         st.info(note)
     st.markdown(verdict_card_html(v, res, var.units, region_name, source), unsafe_allow_html=True)
-    st.plotly_chart(timeseries_figure(out["anomalies"], res, var.units, f"{var.label}: monthly anomalies"),
-                    use_container_width=True)
+  st.plotly_chart(timeseries_figure(out["anomalies"], res, var.units, f"{var.label}: monthly anomalies"),
+                width="stretch")
+
     with st.expander("What am I looking at? (plain language)"):
         st.markdown(
             f"- **Anomaly** = this month's value minus the usual value for that calendar month, so seasons do not hide the trend.\n"
@@ -53,7 +54,7 @@ def show_results(cube, var, bbox, region_name: str, want_map: bool):
             f"- **OLS cross-check** is the ordinary straight-line fit; if it agrees, we trust the answer more.\n"
             f"- Only **straight-line** trends are tested here. Curved or sudden changes are future work.\n"
             f"- Averaged over **{out['n_cells']}** grid cell(s), weighted by cos(latitude).")
-        st.plotly_chart(seasonal_figure(out["climatology"], var.units), use_container_width=True)
+st.plotly_chart(seasonal_figure(out["climatology"], var.units), width="stretch")
 
     if want_map:
         if out["n_cells"] < 2:
@@ -63,7 +64,7 @@ def show_results(cube, var, bbox, region_name: str, want_map: bool):
             slope, pval, stride = pixel_trends(pixel_anomaly_cube(out["clipped"]))
         if stride > 1:
             st.caption(f"Box is large, so every {stride}th grid cell is shown to keep the app fast.")
-        st.plotly_chart(trend_map_figure(slope, pval, var.units), use_container_width=True)
+st.plotly_chart(trend_map_figure(slope, pval, var.units), width="stretch")
 
 
 st.title("🔎 Trend Detective")
