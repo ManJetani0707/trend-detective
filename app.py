@@ -1,7 +1,7 @@
 """Trend Detective: a Streamlit app for NASA Space Apps 2026 'Be An Earth System Trend Detective'.
 
 Run:  streamlit run app.py
-Original code written for NASA Space Apps 2026.
+Code generated with AI assistance (Claude by Anthropic) and run, tested and reviewed by Team Radiant Orbit, NASA Space Apps 2026.
 """
 from __future__ import annotations
 
@@ -217,6 +217,10 @@ then Theil-Sen slope + Mann-Kendall test (pymannkendall), cross-checked with OLS
 - A trend over 10 to 25 years can be natural variability (for example El Niño), not long-term climate change.
 - GLDAS and MERRA-2 are model/reanalysis products, not direct measurements.
 - NASA POWER fallback is a single point at the centre of your box, so it can differ from the area average.
+
+**AI assistance disclosure:** the code of this app was generated with AI assistance (Claude by Anthropic) and was then run,
+tested and reviewed by Team Radiant Orbit. AI assistants (Claude, Gemini) also helped with slide wording and formatting.
+All results shown come from running the code on real NASA data; synthetic data is used only inside automated tests.
 """)
 
 # ------------------------------------------------------------------ footer
