@@ -24,7 +24,7 @@ from .config import BBox, DEMOS, Variable
 
 ProgressFn = Optional[Callable[[float, str], None]]
 
-DEMO_DIR = Path(__file__).resolve().parent.parent / "data" / "demo_cache"
+DEMO_DIR = Path(os.environ.get("TD_DEMO_DIR") or Path(__file__).resolve().parent.parent / "data" / "demo_cache")
 POWER_URL = "https://power.larc.nasa.gov/api/temporal/monthly/point"
 
 
@@ -48,6 +48,20 @@ def cache_dir() -> Path:
 def cache_path(var: Variable, bbox: BBox, y0: int, y1: int, source: str) -> Path:
     raw = f"{var.key}|{var.short_name}|{var.version}|{[round(b, 3) for b in bbox]}|{y0}|{y1}|{source}"
     return cache_dir() / f"{var.key}_{hashlib.sha1(raw.encode()).hexdigest()[:12]}.nc"
+
+
+def month_piece_path(var: Variable, bbox: BBox, month: pd.Timestamp) -> Path:
+    """Each downloaded month is saved on its own, so an interrupted run can RESUME."""
+    raw = f"{var.key}|{var.short_name}|{var.version}|{[round(b, 3) for b in bbox]}"
+    d = cache_dir() / "months" / f"{var.key}_{hashlib.sha1(raw.encode()).hexdigest()[:10]}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{month:%Y%m}.nc"
+
+
+def _save_piece(piece: xr.DataArray, path: Path) -> None:
+    tmp = path.with_suffix(".tmp")
+    piece.to_netcdf(tmp)
+    os.replace(tmp, path)  # atomic: a half-written file is never mistaken for a finished month
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -124,6 +138,13 @@ def fetch_earthaccess(var: Variable, bbox: BBox, y0: int, y1: int, progress: Pro
         month = _granule_month(g)
         if not (y0 <= month.year <= y1):
             continue
+        piece_file = month_piece_path(var, bbox, month)
+        if piece_file.exists():  # resume: this month was already downloaded in an earlier run
+            with xr.open_dataarray(piece_file) as saved:
+                pieces.append(saved.load())
+            if progress:
+                progress((i + 1) / len(results), f"Resumed {month:%Y-%m} from disk")
+            continue
         try:
             ds = xr.open_dataset(f, engine="h5netcdf", group=var.group, decode_times=False)
         except Exception as exc:  # noqa: BLE001
@@ -135,8 +156,13 @@ def fetch_earthaccess(var: Variable, bbox: BBox, y0: int, y1: int, progress: Pro
             da = da.isel({d: 0}, drop=True)
         sub = _subset_box(da, bbox, pad=1.0).load()
         sub = sub.expand_dims(time=[month])
+        _save_piece(sub, piece_file)
         pieces.append(sub)
         ds.close()
+        try:
+            f.close()  # free the network cache of this file right away (keeps memory low on small servers)
+        except Exception:  # noqa: BLE001
+            pass
         if progress:
             progress((i + 1) / len(results), f"Downloaded {month:%Y-%m}")
     if not pieces:
@@ -185,7 +211,7 @@ def fetch_power(var: Variable, bbox: BBox, y0: int, y1: int) -> xr.DataArray:
     da = xr.DataArray(series.values.reshape(-1, 1, 1), coords={"time": series.index, "lat": [lat], "lon": [lon]},
                       dims=("time", "lat", "lon"), name=var.key)
     # POWER's T2M is already in °C and PRECTOTCORR already in mm/day -> mark so processing skips conversion.
-    da.attrs.update(source="NASA POWER (point at box centre)", already_converted=True)
+    da.attrs.update(source="NASA POWER (point at box centre)", already_converted=1)
     return da
 
 
